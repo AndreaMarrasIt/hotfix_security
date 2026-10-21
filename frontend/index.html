@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="it">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="theme-color" content="#f3f5f2">
+	<title>Copilot Ops | Kubernetes</title>
+	<style>
+		:root {
+			color-scheme: light;
+			--ink: #202925;
+			--ink-soft: #59645e;
+			--muted: #7c8780;
+			--line: #dfe5df;
+			--paper: #ffffff;
+			--canvas: #f3f5f2;
+			--green: #247653;
+			--green-dark: #174c37;
+			--green-pale: #e6f2eb;
+			--amber: #a75a0a;
+			--amber-pale: #fff2df;
+			--red: #b23b3b;
+			--red-pale: #fae9e7;
+			--blue: #315d91;
+			--blue-pale: #e8f0fa;
+			--shadow: 0 12px 32px rgba(33, 49, 40, .055);
+			font-family: "Segoe UI Variable", "Aptos", "Segoe UI", sans-serif;
+			font-synthesis: none;
+			text-rendering: optimizeLegibility;
+		}
+
+		* { box-sizing: border-box; }
+		body {
+			min-width: 320px;
+			min-height: 100vh;
+			margin: 0;
+			color: var(--ink);
+			background-color: var(--canvas);
+			background-image: linear-gradient(rgba(44, 77, 57, .025) 1px, transparent 1px), linear-gradient(90deg, rgba(44, 77, 57, .025) 1px, transparent 1px);
+			background-size: 28px 28px;
+		}
+
+		button, input, select, textarea { font: inherit; }
+		button { cursor: pointer; }
+		body:has(dialog[open]) { overflow: hidden; }
+		button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+			outline: 3px solid rgba(49, 93, 145, .34);
+			outline-offset: 2px;
+		}
+
+		.topbar {
+			min-height: 68px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 20px;
+			padding: 0 max(28px, calc((100vw - 1320px) / 2));
+			color: #f6f8f6;
+			background: var(--green-dark);
+			border-bottom: 3px solid #75b38d;
+		}
+		.brand { display: flex; align-items: center; gap: 12px; font-weight: 650; letter-spacing: .2px; }
+		.brand-mark {
+			width: 32px;
+			height: 32px;
+			display: grid;
+			place-items: center;
+			color: #d7f0df;
+			border: 1px solid rgba(215, 240, 223, .4);
+			border-radius: 8px;
+			font-size: 13px;
+			font-weight: 750;
+		}
+		.topbar-meta { display: flex; align-items: center; gap: 10px; color: #d1e1d6; font-size: 13px; }
+		.connection-dot { width: 8px; height: 8px; border-radius: 50%; background: #8bd1a5; box-shadow: 0 0 0 4px rgba(139, 209, 165, .13); }
+		.connection-dot.offline { background: #f0a59d; box-shadow: 0 0 0 4px rgba(240, 165, 157, .13); }
+
+		main { width: min(1320px, calc(100% - 56px)); margin: 34px auto 64px; }
+		.page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 25px; }
+		.eyebrow { margin: 0 0 7px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: 1.2px; text-transform: uppercase; }
+		h1, h2, h3, p { margin-top: 0; }
+		h1 { margin-bottom: 6px; font-family: Georgia, "Times New Roman", serif; font-size: 34px; font-weight: 500; line-height: 1.15; }
+		.subtitle { margin-bottom: 0; color: var(--ink-soft); font-size: 14px; }
+		.scope-label { display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; color: var(--green-dark); background: var(--green-pale); border: 1px solid #cfe4d6; border-radius: 6px; font-size: 12px; font-weight: 650; white-space: nowrap; }
+		.scope-label::before { width: 7px; height: 7px; content: ""; border-radius: 50%; background: var(--green); }
+
+		.notice {
+			display: flex;
+			align-items: flex-start;
+			gap: 12px;
+			margin-bottom: 22px;
+			padding: 13px 16px;
+			color: #71450e;
+			background: #fff7e9;
+			border: 1px solid #f0dfbf;
+			border-left: 3px solid #cf8a2c;
+			border-radius: 5px;
+			font-size: 13px;
+			line-height: 1.5;
+		}
+		.notice strong { color: #65400f; }
+		.notice p { margin: 0; }
+
+		.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 22px; }
+		.metric { min-height: 94px; padding: 16px 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); }
+		.metric-label { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+		.metric-mark { width: 8px; height: 8px; border-radius: 2px; background: var(--blue); }
+		.metric.running .metric-mark { background: var(--amber); }
+		.metric.failed .metric-mark { background: var(--red); }
+		.metric-value { font-size: 25px; font-variant-numeric: tabular-nums; font-weight: 700; line-height: 1; }
+
+		.workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 20px; }
+		.form-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .7fr) minmax(0, 1.4fr); gap: 0 20px; align-items: start; }
+		.form-body .primary-button { grid-column: 1 / -1; width: fit-content; min-width: 180px; }
+		.form-body .form-feedback { grid-column: 1 / -1; }
+		.form-panel, .field { min-width: 0; }
+		.panel { background: var(--paper); border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--shadow); }
+		.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 19px 20px 16px; border-bottom: 1px solid var(--line); }
+		.panel-heading h2 { margin: 0; font-size: 16px; font-weight: 700; }
+		.panel-kicker { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+		.form-body { padding: 18px 20px 20px; }
+		.field { margin-bottom: 17px; }
+		.field label { display: block; margin-bottom: 7px; color: #39443e; font-size: 12px; font-weight: 700; }
+		.field-hint { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+		input, select, textarea {
+			width: 100%;
+			min-height: 41px;
+			padding: 10px 11px;
+			color: var(--ink);
+			background: #fff;
+			border: 1px solid #cbd4cd;
+			border-radius: 4px;
+			font-size: 13px;
+		}
+		textarea { min-height: 130px; resize: vertical; line-height: 1.5; }
+		input::placeholder, textarea::placeholder { color: #9aa49d; }
+		.primary-button, .quiet-button, .approve-button, .dialog-cancel {
+			min-height: 39px;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+			padding: 9px 13px;
+			border: 1px solid transparent;
+			border-radius: 4px;
+			font-size: 12px;
+			font-weight: 700;
+			transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+		}
+		.primary-button { width: 100%; color: #fff; background: var(--green); }
+		.primary-button:hover:not(:disabled) { background: #1e6546; }
+		.primary-button:active:not(:disabled), .quiet-button:active, .approve-button:active { transform: translateY(1px); }
+		button:disabled { cursor: wait; opacity: .65; }
+		.quiet-button { color: #34433a; background: #fff; border-color: #ccd5ce; }
+		.quiet-button:hover { background: #f4f7f4; border-color: #aab9ae; }
+		.approve-button { color: #fff; background: var(--green); }
+		.approve-button:hover { background: #1e6546; }
+		.form-feedback { min-height: 18px; margin: 11px 0 0; color: var(--red); font-size: 12px; line-height: 1.4; }
+
+		.requests-panel { min-width: 0; }
+		.requests-heading { align-items: center; }
+		.request-controls { display: flex; align-items: center; gap: 8px; }
+		.request-controls input { width: min(220px, 24vw); min-height: 36px; padding: 8px 10px; font-size: 12px; }
+		.request-controls select { width: 136px; min-height: 36px; padding: 7px 9px; font-size: 12px; }
+		.request-list { display: grid; gap: 10px; padding: 14px; }
+		.request-card { min-width: 0; padding: 15px 16px; background: #fff; border: 1px solid var(--line); border-left: 3px solid #9ca9a0; border-radius: 5px; animation: appear .24s ease both; }
+		.request-card[data-status="running"] { border-left-color: #d29439; }
+		.request-card[data-status="complete"] { border-left-color: #4c9b6e; }
+		.request-card[data-status="failed"] { border-left-color: #d16c65; }
+		.request-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+		.request-title { min-width: 0; margin: 0; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+		.request-id { color: var(--muted); font-size: 11px; font-weight: 550; }
+		.badge { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 3px; font-size: 10px; font-weight: 750; }
+		.badge::before { width: 6px; height: 6px; content: ""; border-radius: 50%; background: currentColor; }
+		.badge.running { color: var(--amber); background: var(--amber-pale); }
+		.badge.complete { color: var(--green); background: var(--green-pale); }
+		.badge.failed { color: var(--red); background: var(--red-pale); }
+		.badge.queued { color: var(--blue); background: var(--blue-pale); }
+		.request-repo { margin: 12px 0 8px; color: var(--green); font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
+		.request-task { margin: 0; color: #4d5952; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+		.request-meta { display: flex; flex-wrap: wrap; gap: 7px 15px; margin-top: 11px; color: var(--muted); font-size: 10px; }
+		.request-meta span { overflow-wrap: anywhere; }
+		.request-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+		.request-actions a { color: var(--blue); font-size: 11px; font-weight: 700; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+		.request-actions .approve-button { min-height: 33px; padding: 7px 10px; font-size: 11px; }
+		details { margin-top: 11px; border-top: 1px solid #edf0ed; }
+		details summary { width: fit-content; padding-top: 10px; color: #45584b; cursor: pointer; font-size: 11px; font-weight: 700; }
+		details pre { max-height: 360px; margin: 10px 0 2px; padding: 12px; overflow: auto; color: #344139; background: #f4f7f4; border: 1px solid #e4eae5; border-radius: 4px; font: 11px/1.55 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+		.empty-state { padding: 42px 20px; color: var(--ink-soft); text-align: center; }
+		.empty-mark { width: 36px; height: 36px; display: grid; place-items: center; margin: 0 auto 12px; color: var(--green); background: var(--green-pale); border-radius: 50%; font-family: Georgia, serif; font-size: 20px; }
+		.empty-state strong { display: block; margin-bottom: 5px; color: var(--ink); font-size: 13px; }
+		.empty-state p { margin: 0; font-size: 12px; }
+		.loading-state { padding: 28px 16px; color: var(--muted); text-align: center; font-size: 12px; }
+		.toast { position: fixed; right: 24px; bottom: 24px; z-index: 5; max-width: min(420px, calc(100vw - 32px)); padding: 13px 16px; color: white; background: #26352c; border: 1px solid rgba(255,255,255,.2); border-radius: 5px; box-shadow: 0 12px 30px rgba(20,35,26,.22); font-size: 13px; line-height: 1.45; animation: appear .18s ease both; }
+		.toast.error { background: #8f3333; }
+		.toast[hidden] { display: none; }
+		dialog { width: min(430px, calc(100% - 32px)); padding: 0; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 24px 80px rgba(15, 30, 20, .25); }
+		dialog::backdrop { background: rgba(24, 36, 28, .42); backdrop-filter: blur(2px); }
+		.dialog-content { padding: 23px; }
+		.dialog-content h2 { margin: 0 0 8px; font-size: 18px; }
+		.dialog-content > p { margin-bottom: 17px; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+		.dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
+		.dialog-cancel { color: #39453e; background: #fff; border-color: #ccd5ce; }
+		.dialog-submit { width: auto; }
+		.danger-button { color: var(--red); border-color: #e1bab7; }
+		.danger-button:hover:not(:disabled) { color: #8d2626; background: var(--red-pale); border-color: var(--red); }
+		.request-details-dialog { width: min(1100px, calc(100% - 32px)); max-height: calc(100dvh - 32px); }
+		.request-details-dialog .panel-heading { position: sticky; top: 0; align-items: center; background: white; z-index: 1; }
+		.request-details-content { padding: 24px; }
+		.request-details-content dl { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 12px 20px; margin: 0 0 24px; font-size: 14px; line-height: 1.6; }
+		.request-details-content dt { color: var(--ink-soft); font-weight: 650; }
+		.request-details-content dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+		.request-details-content h3 { margin: 24px 0 10px; font-size: 15px; }
+		.request-details-content pre { margin: 0; padding: 18px; color: var(--ink); background: #f4f7f4; border: 1px solid var(--line); border-radius: 4px; font: 13px/1.7 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+		.request-details-content a { color: var(--green); }
+		#deleteDescription { overflow-wrap: anywhere; }
+		.profile-options { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 18px; }
+		.profile-options .field { min-width: 180px; margin: 0; }
+		.skill-options { min-width: 0; margin: 0; padding: 0; border: 0; }
+		.skill-options legend { margin-bottom: 8px; color: var(--ink-soft); font-size: 12px; font-weight: 700; }
+		.skill-options label { display: inline-flex; align-items: center; gap: 6px; margin: 0 14px 6px 0; font-size: 12px; }
+		.skill-options input { width: 16px; min-height: 16px; height: 16px; margin: 0; accent-color: var(--green); }
+		.conversation-dialog { width: min(1100px, calc(100% - 24px)); height: calc(100dvh - 32px); max-height: 1000px; }
+		.conversation-dialog[open] { display: flex; flex-direction: column; }
+		.conversation-dialog > .panel-heading { flex: 0 0 auto; align-items: center; }
+		.conversation-dialog .panel-kicker { overflow-wrap: anywhere; }
+		.conversation-body { min-height: 0; overflow-y: auto; padding: 20px; flex: 1; }
+		.conversation-turn { padding: 0 0 24px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
+		.conversation-turn:last-child { margin-bottom: 0; }
+		.turn-label { color: var(--green); font-size: 12px; font-weight: 750; margin: 0 0 8px; }
+		.turn-task { margin: 0 0 18px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+		.turn-report { margin: 8px 0; font: 13px/1.7 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+		.conversation-composer { padding: 16px 20px; border-top: 1px solid var(--line); flex: 0 0 auto; }
+		.conversation-composer textarea { min-height: 70px; max-height: 160px; }
+		.composer-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 10px; }
+		.composer-controls .field { flex: 1; min-width: 150px; margin: 0; }
+		.composer-controls .primary-button { width: auto; }
+		.conversation-composer .profile-options { margin: 12px 0 0; }
+		.review-patch { max-height: 240px; overflow: auto; margin: 0 0 16px; padding: 12px; background: #f4f7f4; border: 1px solid var(--line); font: 12px/1.6 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+		#approvalDialog { width: min(850px, calc(100% - 32px)); max-height: calc(100dvh - 32px); }
+		@keyframes appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+		@media (max-width: 900px) {
+			.workspace { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+			.form-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+			.form-body .field:last-of-type { grid-column: 1 / -1; }
+			.requests-heading { align-items: stretch; flex-direction: column; }
+			.panel-heading { padding-right: 15px; padding-left: 15px; }
+			.form-body { padding-right: 15px; padding-left: 15px; }
+			.request-controls { flex-wrap: wrap; justify-content: flex-end; }
+			.request-controls input { width: 100%; }
+		}
+		@media (max-width: 680px) {
+			.topbar { min-height: 58px; padding: 0 18px; }
+			.topbar-meta { font-size: 11px; }
+			main { width: min(100% - 32px, 520px); margin-top: 25px; }
+			.page-heading { align-items: flex-start; flex-direction: column; gap: 14px; margin-bottom: 19px; }
+			h1 { font-size: 30px; }
+			.metrics { gap: 8px; margin-bottom: 15px; }
+			.metric { min-height: 79px; padding: 12px 10px; }
+			.metric-label { gap: 5px; font-size: 10px; }
+			.metric-value { font-size: 22px; }
+			.workspace { grid-template-columns: 1fr; }
+			.form-body { grid-template-columns: minmax(0, 1fr); }
+			.form-body .primary-button { width: 100%; }
+			.request-details-content { padding: 16px; }
+			.request-details-content dl { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+			.request-details-content dd { margin-bottom: 12px; }
+			.conversation-body { padding: 14px; }
+			.conversation-composer { padding: 12px; max-height: 48dvh; overflow-y: auto; }
+			.composer-controls .primary-button { width: 100%; }
+			.form-panel { order: 0; }
+			.requests-panel { order: 1; }
+			.requests-heading { align-items: flex-start; flex-direction: column; }
+			.request-controls { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 130px auto; }
+			.request-controls input { width: 100%; }
+			.request-controls select { width: 100%; }
+			.request-controls .quiet-button { padding-right: 9px; padding-left: 9px; }
+			.request-list { padding: 10px; }
+			.notice { font-size: 12px; }
+		}
+		@media (max-width: 390px) {
+			main { width: calc(100% - 24px); }
+			.topbar { padding: 0 12px; }
+			.brand { gap: 8px; font-size: 13px; }
+			.topbar-meta { gap: 7px; font-size: 10px; }
+			.request-controls { grid-template-columns: minmax(0, 1fr) 112px; }
+			.request-controls .quiet-button { grid-column: 1 / -1; }
+		}
+		@media (prefers-reduced-motion: reduce) {
+			*, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+		}
+	</style>
+</head>
+<body>
+	<header class="topbar">
+		<div class="brand"><span class="brand-mark" aria-hidden="true">CK</span><span>Copilot Ops</span></div>
+		<div class="topbar-meta" aria-live="polite"><span class="connection-dot" id="connectionDot"></span><span id="connectionText">Connessione in corso</span></div>
+	</header>
+
+	<main>
+		<section class="page-heading" aria-labelledby="pageTitle">
+			<div>
+				<p class="eyebrow">Kubernetes · repository automation</p>
+				<h1 id="pageTitle">Centro operativo</h1>
+				<p class="subtitle">Analisi e proposte di remediation per i tuoi repository.</p>
+			</div>
+			<span class="scope-label" id="scopeLabel">Ambiente locale</span>
+		</section>
+
+		<aside class="notice" aria-label="Avviso di sicurezza">
+			<p><strong>Solo per sviluppo locale.</strong> Mantieni il servizio accessibile esclusivamente tramite port-forward. Verifica ogni patch prima dell'approvazione; non usare repository sensibili.</p>
+		</aside>
+
+		<section class="metrics" aria-label="Riepilogo richieste">
+			<article class="metric running"><div class="metric-label"><span class="metric-mark"></span>In esecuzione</div><div class="metric-value" id="runningCount">–</div></article>
+			<article class="metric"><div class="metric-label"><span class="metric-mark"></span>Completate</div><div class="metric-value" id="completeCount">–</div></article>
+			<article class="metric failed"><div class="metric-label"><span class="metric-mark"></span>Non riuscite</div><div class="metric-value" id="failedCount">–</div></article>
+		</section>
+
+		<div class="workspace">
+			<section class="panel form-panel" aria-labelledby="newRequestTitle">
+				<div class="panel-heading">
+					<div><h2 id="newRequestTitle">Nuova richiesta</h2><p class="panel-kicker">Avvia un job isolato nel cluster.</p></div>
+				</div>
+				<form id="runForm" class="form-body">
+					<div class="field">
+						<label for="repo">Repository HTTPS</label>
+						<input id="repo" name="repo" type="url" required maxlength="500" autocomplete="url" placeholder="https://github.com/owner/repo">
+						<p class="field-hint">Host consentiti: <span id="allowedHosts">caricamento…</span></p>
+					</div>
+					<div class="field">
+						<label for="mode">Modalità</label>
+						<select id="mode" name="mode">
+							<option value="analyze">Analisi in sola lettura</option>
+							<option value="propose">Proposta di remediation</option>
+						</select>
+					</div>
+					<div class="field">
+						<label for="task">Obiettivo dell'analisi</label>
+						<textarea id="task" name="task" required minlength="5" maxlength="4000" rows="6" placeholder="Descrivi cosa vuoi analizzare o quale problema vuoi approfondire…"></textarea>
+					</div>
+					<div class="profile-options">
+						<div class="field"><label for="agent">Profilo Agent</label><select id="agent"><option value="general">Generale</option><option value="security">Security review</option><option value="reliability">Affidabilità</option></select></div>
+						<fieldset class="skill-options" id="initialSkills"><legend>Skill di analisi</legend><label><input type="checkbox" value="input-validation">Validazione input</label><label><input type="checkbox" value="error-handling">Gestione errori</label><label><input type="checkbox" value="tests">Test di regressione</label></fieldset>
+					</div>
+					<button class="primary-button" id="submitButton" type="submit">Avvia richiesta <span aria-hidden="true">→</span></button>
+					<p class="form-feedback" id="formFeedback" role="status" aria-live="polite"></p>
+				</form>
+			</section>
+
+			<section class="panel requests-panel" aria-labelledby="requestsTitle">
+				<div class="panel-heading requests-heading">
+					<div><h2 id="requestsTitle">Richieste recenti</h2><p class="panel-kicker" id="requestSummary">Aggiornamento automatico ogni 10 secondi</p></div>
+					<div class="request-controls">
+						<input id="searchRequests" type="search" aria-label="Cerca tra le richieste" placeholder="Cerca repository o task">
+						<select id="statusFilter" aria-label="Filtra per stato">
+							<option value="all">Tutti gli stati</option>
+							<option value="running">In esecuzione</option>
+							<option value="complete">Completate</option>
+							<option value="failed">Non riuscite</option>
+						</select>
+						<button class="quiet-button" id="refreshButton" type="button">Aggiorna</button>
+					</div>
+				</div>
+				<div class="request-list" id="requests" aria-live="polite" aria-busy="true"><div class="loading-state">Caricamento richieste…</div></div>
+			</section>
+		</div>
+	</main>
+
+	<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+	<dialog id="approvalDialog" aria-labelledby="approvalTitle">
+		<form id="approvalForm" class="dialog-content">
+			<h2 id="approvalTitle">Approva la proposta</h2>
+			<p>L'approvazione avvia un nuovo job che applica la patch e tenta di aprire una pull request. Conferma solo dopo aver verificato la modifica.</p>
+			<div class="field">
+				<label for="approver">Nome o identificativo approvatore</label>
+				<input id="approver" name="approver" required minlength="2" maxlength="120" autocomplete="name" placeholder="Es. nome.cognome">
+			</div>
+			<div class="field">
+				<label for="branchName">Nuovo branch nel repository originale</label>
+				<input id="branchName" name="branch_name" required maxlength="120" autocomplete="off" placeholder="copilot/fix-validazione-input">
+			</div>
+			<h3>Patch da approvare</h3>
+			<pre id="approvalPatch" class="review-patch"></pre>
+			<p id="approvalFeedback" class="form-feedback" role="alert"></p>
+			<div class="dialog-actions">
+				<button class="dialog-cancel" id="cancelApproval" type="button">Annulla</button>
+				<button class="primary-button dialog-submit" id="confirmApproval" type="submit">Conferma approvazione</button>
+			</div>
+		</form>
+	</dialog>
+
+	<dialog class="conversation-dialog" id="conversationDialog" aria-labelledby="conversationTitle">
+		<div class="panel-heading"><div><h2 id="conversationTitle">Conversazione con Copilot</h2><p class="panel-kicker" id="conversationRepo"></p></div><button class="quiet-button" id="closeConversation" type="button">Chiudi</button></div>
+		<div class="conversation-body" id="conversationTurns" role="log" aria-live="polite"></div>
+		<form class="conversation-composer" id="followupForm">
+			<label for="followupTask">Messaggio per Copilot</label>
+			<textarea id="followupTask" required minlength="5" maxlength="4000" rows="2" placeholder="Approfondisci il risultato oppure descrivi la fix da proporre..."></textarea>
+			<div class="composer-controls">
+				<div class="field"><label for="followupMode">Azione</label><select id="followupMode"><option value="analyze">Nuova analisi</option><option value="propose">Proponi una fix</option></select></div>
+				<div class="field"><label for="followupAgent">Profilo Agent</label><select id="followupAgent"><option value="general">Generale</option><option value="security">Security review</option><option value="reliability">Affidabilità</option></select></div>
+				<button class="primary-button" id="sendFollowup" type="submit">Invia a Copilot</button>
+			</div>
+			<div class="profile-options"><fieldset class="skill-options" id="followupSkills"><legend>Skill di analisi</legend><label><input type="checkbox" value="input-validation">Validazione input</label><label><input type="checkbox" value="error-handling">Gestione errori</label><label><input type="checkbox" value="tests">Test di regressione</label></fieldset></div>
+			<p id="followupFeedback" class="form-feedback" role="status"></p>
+		</form>
+	</dialog>
+
+	<dialog class="request-details-dialog" id="requestDetailsDialog" aria-labelledby="requestDetailsTitle">
+		<div class="panel-heading">
+			<h2 id="requestDetailsTitle">Dettagli richiesta</h2>
+			<button class="quiet-button" id="closeRequestDetails" type="button" autofocus>Chiudi</button>
+		</div>
+		<div class="request-details-content" id="requestDetailsContent"></div>
+	</dialog>
+
+	<dialog id="deleteDialog" aria-labelledby="deleteTitle" aria-describedby="deleteDescription">
+		<form id="deleteForm" class="dialog-content">
+			<h2 id="deleteTitle">Elimina dalla cronologia?</h2>
+			<p id="deleteDescription"></p>
+			<p>Report e patch salvati saranno eliminati definitivamente. Il repository, le pull request e i job Kubernetes non verranno modificati.</p>
+			<p id="deleteFeedback" class="form-feedback" role="alert"></p>
+			<div class="dialog-actions">
+				<button class="dialog-cancel" id="cancelDelete" type="button" autofocus>Annulla</button>
+				<button class="quiet-button danger-button" id="confirmDelete" type="submit">Elimina richiesta</button>
+			</div>
+		</form>
+	</dialog>
+
+	<script>
+		const elements = {
+			form: document.getElementById('runForm'),
+			repo: document.getElementById('repo'),
+			mode: document.getElementById('mode'),
+			task: document.getElementById('task'),
+			submit: document.getElementById('submitButton'),
+			feedback: document.getElementById('formFeedback'),
+			requests: document.getElementById('requests'),
+			summary: document.getElementById('requestSummary'),
+			search: document.getElementById('searchRequests'),
+			filter: document.getElementById('statusFilter'),
+			refresh: document.getElementById('refreshButton'),
+			toast: document.getElementById('toast'),
+			dialog: document.getElementById('approvalDialog'),
+			approvalForm: document.getElementById('approvalForm'),
+			approver: document.getElementById('approver'),
+			confirmApproval: document.getElementById('confirmApproval'),
+			connectionDot: document.getElementById('connectionDot'),
+			connectionText: document.getElementById('connectionText')
+		};
+		let requests = [];
+		let refreshing = false;
+		let toastTimer;
+		let pendingApprovalId = null;
+		let pendingDeleteId = null;
+		const deletedIds = new Set();
+		const detailsDialog = document.getElementById('requestDetailsDialog');
+		const deleteDialog = document.getElementById('deleteDialog');
+		const deleteFeedback = document.getElementById('deleteFeedback');
+		const confirmDelete = document.getElementById('confirmDelete');
+		const conversationDialog = document.getElementById('conversationDialog');
+		const conversationTurns = document.getElementById('conversationTurns');
+		const followupFeedback = document.getElementById('followupFeedback');
+		const sendFollowup = document.getElementById('sendFollowup');
+		let conversationRequestId = null;
+		let conversationItems = [];
+		let lastConversationRender = '';
+		let sendingFollowup = false;
+		let conversationLoading = false;
+
+		function selectedSkills(containerId) {
+			return Array.from(document.querySelectorAll(`#${containerId} input:checked`), input => input.value);
+		}
+
+		function decodePatch(value) {
+			if (!value) return 'Nessuna patch disponibile.';
+			try { return new TextDecoder().decode(Uint8Array.from(atob(value), character => character.charCodeAt(0))); }
+			catch { return 'Patch non leggibile: non approvare questa proposta.'; }
+		}
+
+		async function api(path, options = {}) {
+			const response = await fetch(path, {
+				...options,
+				headers: { 'Content-Type': 'application/json', ...options.headers }
+			});
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				const detail = payload.detail;
+				throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail || payload));
+			}
+			return payload;
+		}
+
+		function escapeHtml(value) {
+			return String(value ?? '').replace(/[&<>"']/g, character => ({
+				'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+			}[character]));
+		}
+
+		function showToast(message, isError = false) {
+			window.clearTimeout(toastTimer);
+			elements.toast.textContent = message;
+			elements.toast.classList.toggle('error', isError);
+			elements.toast.hidden = false;
+			toastTimer = window.setTimeout(() => { elements.toast.hidden = true; }, 5000);
+		}
+
+		function updateConnection(connected) {
+			elements.connectionDot.classList.toggle('offline', !connected);
+			elements.connectionText.textContent = connected ? 'API connessa' : 'API non raggiungibile';
+		}
+
+		function statusLabel(status) {
+			return ({ running: 'In esecuzione', complete: 'Completata', failed: 'Non riuscita' })[status] || 'In coda';
+		}
+
+		function formatDate(value) {
+			const date = new Date(value);
+			return Number.isNaN(date.getTime()) ? String(value || '') : new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+		}
+
+		function updateMetrics() {
+			document.getElementById('runningCount').textContent = requests.filter(item => item.status === 'running').length;
+			document.getElementById('completeCount').textContent = requests.filter(item => item.status === 'complete').length;
+			document.getElementById('failedCount').textContent = requests.filter(item => item.status === 'failed').length;
+			elements.summary.textContent = `${requests.length} ${requests.length === 1 ? 'richiesta' : 'richieste'} · aggiornamento automatico ogni 10 secondi`;
+		}
+
+		function renderRequests() {
+			const openReports = new Set(Array.from(elements.requests.querySelectorAll('details[open][data-report]'), node => node.dataset.report));
+			const query = elements.search.value.trim().toLocaleLowerCase('it');
+			const status = elements.filter.value;
+			const visible = requests.filter(item => {
+				const matchesStatus = status === 'all' || item.status === status;
+				const searchable = `${item.repo_url || ''} ${item.task || ''} ${item.id || ''}`.toLocaleLowerCase('it');
+				return matchesStatus && searchable.includes(query);
+			});
+
+			if (!visible.length) {
+				const isFiltered = requests.length > 0;
+				elements.requests.innerHTML = `<div class="empty-state"><span class="empty-mark" aria-hidden="true">${isFiltered ? '⌕' : '＋'}</span><strong>${isFiltered ? 'Nessun risultato' : 'Nessuna richiesta ancora'}</strong><p>${isFiltered ? 'Modifica i filtri per vedere altre richieste.' : 'Le richieste avviate compariranno qui.'}</p></div>`;
+				elements.requests.setAttribute('aria-busy', 'false');
+				return;
+			}
+
+			elements.requests.innerHTML = visible.map(item => {
+				const statusClass = ['running', 'complete', 'failed'].includes(item.status) ? item.status : 'queued';
+				const report = item.report ? `<details data-report="${escapeHtml(item.id)}" ${openReports.has(String(item.id)) ? 'open' : ''}><summary>Apri report</summary><pre>${escapeHtml(item.report)}</pre></details>` : '';
+				const error = item.error ? `<details open><summary>Dettagli errore</summary><pre>${escapeHtml(item.error)}</pre></details>` : '';
+				const prUrl = safePullRequestUrl(item.pr_url);
+				const pullRequest = prUrl ? `<a href="${escapeHtml(prUrl)}" target="_blank" rel="noopener noreferrer">Apri pull request</a>` : '';
+				const canApprove = item.mode === 'propose' && item.status === 'complete' && item.patch_b64 && !requests.some(turn => turn.mode === 'apply' && turn.parent_id === item.id && turn.status !== 'failed');
+				const approval = canApprove ? `<button class="approve-button" type="button" data-approve="${escapeHtml(item.id)}">Verifica e approva</button>` : '';
+				const modeLabel = item.mode === 'propose' ? 'Proposta' : item.mode === 'apply' ? 'Applicazione' : 'Analisi';
+				return `<article class="request-card" data-status="${escapeHtml(statusClass)}">
+					<div class="request-top"><h3 class="request-title">${escapeHtml(modeLabel)} <span class="request-id">· ${escapeHtml(item.id)}</span></h3><span class="badge ${statusClass}">${statusLabel(item.status)}</span></div>
+					<p class="request-repo">${escapeHtml(item.repo_url)}</p>
+					<p class="request-task">${escapeHtml(item.task)}</p>
+					<div class="request-meta"><span>Job: ${escapeHtml(item.job_name)}</span><span>${escapeHtml(formatDate(item.created_at))}</span></div>
+					${report}${error}
+					<div class="request-actions">
+						<button class="quiet-button" type="button" data-conversation="${escapeHtml(item.id)}">Conversazione</button>
+						<button class="quiet-button" type="button" data-details="${escapeHtml(item.id)}">Apri dettagli</button>
+						${pullRequest}${approval}
+						<button class="quiet-button danger-button" type="button" data-delete="${escapeHtml(item.id)}" aria-label="Elimina richiesta ${escapeHtml(item.id)}">Elimina</button>
+					</div>
+				</article>`;
+			}).join('');
+			elements.requests.setAttribute('aria-busy', 'false');
+		}
+
+		function safePullRequestUrl(value) {
+			try {
+				const url = new URL(value);
+				return url.protocol === 'https:' ? url.href : '';
+			} catch {
+				return '';
+			}
+		}
+
+		function openRequestDetails(item) {
+			const repoUrl = safePullRequestUrl(item.repo_url);
+			const prUrl = safePullRequestUrl(item.pr_url);
+			const fields = [
+				['Repository', repoUrl ? `<a href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.repo_url)}</a>` : escapeHtml(item.repo_url)],
+				['ID richiesta', escapeHtml(item.id)],
+				['Modalità', escapeHtml(({ analyze: 'Analisi in sola lettura', propose: 'Proposta di remediation', apply: 'Applicazione' })[item.mode] || item.mode)],
+				['Stato', escapeHtml(statusLabel(item.status))],
+				['Creata il', escapeHtml(formatDate(item.created_at))],
+				['Job Kubernetes', escapeHtml(item.job_name)],
+				['Commit di base', escapeHtml(item.base_sha || 'Non disponibile')],
+				['Branch PR', escapeHtml(item.branch_name || 'Non ancora richiesto')],
+				['Profilo Agent', escapeHtml(item.agent || 'general')],
+				['Obiettivo', escapeHtml(item.task)]
+			];
+			if (prUrl) fields.push(['Pull request', `<a href="${escapeHtml(prUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(prUrl)}</a>`]);
+			document.getElementById('requestDetailsContent').innerHTML = `<dl>${fields.map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')}</dl>
+				<h3>Report completo</h3><pre>${escapeHtml(item.report || 'Report non ancora disponibile.')}</pre>
+				${item.patch_b64 ? `<h3>Patch proposta</h3><pre>${escapeHtml(decodePatch(item.patch_b64))}</pre>` : ''}
+				${item.error ? `<h3>Dettagli errore</h3><pre>${escapeHtml(item.error)}</pre>` : ''}`;
+			detailsDialog.showModal();
+		}
+
+		async function refreshRequests() {
+			if (refreshing) return;
+			refreshing = true;
+			elements.refresh.disabled = true;
+			elements.requests.setAttribute('aria-busy', 'true');
+			try {
+				const items = await api('/api/requests');
+				const updated = await Promise.all(items.map(async item => {
+					try { return await api(`/api/requests/${encodeURIComponent(item.id)}`); }
+					catch (error) { return { ...item, error: item.error || error.message }; }
+				}));
+				requests = updated.filter(item => !deletedIds.has(item.id));
+				updateConnection(true);
+				updateMetrics();
+				renderRequests();
+				if (conversationDialog.open) await loadConversation();
+			} catch (error) {
+				updateConnection(false);
+				elements.requests.innerHTML = `<div class="empty-state"><strong>Impossibile caricare le richieste</strong><p>${escapeHtml(error.message)}</p></div>`;
+				elements.requests.setAttribute('aria-busy', 'false');
+			} finally {
+				refreshing = false;
+				elements.refresh.disabled = false;
+			}
+		}
+
+		elements.form.addEventListener('submit', async event => {
+			event.preventDefault();
+			elements.feedback.textContent = '';
+			elements.submit.disabled = true;
+			elements.submit.textContent = 'Avvio in corso…';
+			try {
+				const result = await api('/api/requests', {
+					method: 'POST',
+					body: JSON.stringify({ repo_url: elements.repo.value.trim(), mode: elements.mode.value, task: elements.task.value.trim(), agent: document.getElementById('agent').value, skills: selectedSkills('initialSkills') })
+				});
+				elements.form.reset();
+				showToast(`Job ${result.job_name} avviato.`);
+				await refreshRequests();
+			} catch (error) {
+				elements.feedback.textContent = error.message;
+			} finally {
+				elements.submit.disabled = false;
+				elements.submit.innerHTML = 'Avvia richiesta <span aria-hidden="true">→</span>';
+			}
+		});
+
+		elements.requests.addEventListener('click', event => {
+			const conversationButton = event.target.closest('[data-conversation]');
+			if (conversationButton) { openConversation(conversationButton.dataset.conversation); return; }
+			const detailsButton = event.target.closest('[data-details]');
+			if (detailsButton) {
+				const item = requests.find(request => request.id === detailsButton.dataset.details);
+				if (item) openRequestDetails(item);
+				return;
+			}
+			const deleteButton = event.target.closest('[data-delete]');
+			if (deleteButton) {
+				const item = requests.find(request => request.id === deleteButton.dataset.delete);
+				if (!item) return;
+				pendingDeleteId = item.id;
+				document.getElementById('deleteDescription').textContent = `Richiesta ${item.id} · ${item.repo_url}`;
+				deleteFeedback.textContent = '';
+				deleteDialog.showModal();
+				return;
+			}
+			const button = event.target.closest('[data-approve]');
+			if (!button) return;
+			pendingApprovalId = button.dataset.approve;
+			openApproval(pendingApprovalId);
+		});
+
+		function openApproval(requestId) {
+			const item = conversationItems.find(turn => turn.id === requestId) || requests.find(turn => turn.id === requestId);
+			if (!item || item.status !== 'complete' || !item.patch_b64) return;
+			pendingApprovalId = requestId;
+			elements.approver.value = '';
+			document.getElementById('branchName').value = '';
+			document.getElementById('approvalFeedback').textContent = '';
+			document.getElementById('approvalPatch').textContent = decodePatch(item.patch_b64);
+			elements.dialog.showModal();
+			elements.approver.focus();
+		}
+
+		async function openConversation(requestId) {
+			conversationRequestId = requestId;
+			conversationItems = [];
+			lastConversationRender = '';
+			conversationTurns.textContent = 'Caricamento conversazione...';
+			followupFeedback.textContent = '';
+			document.getElementById('followupTask').value = '';
+			sendFollowup.disabled = true;
+			conversationDialog.showModal();
+			await loadConversation();
+		}
+
+		async function loadConversation() {
+			if (!conversationRequestId || conversationLoading) return;
+			conversationLoading = true;
+			const requestId = conversationRequestId;
+			try {
+				const turns = await api(`/api/requests/${encodeURIComponent(requestId)}/conversation`);
+				if (conversationRequestId !== requestId) return;
+				conversationItems = turns;
+				document.getElementById('conversationRepo').textContent = turns[0]?.repo_url || '';
+				const markup = turns.map(turn => {
+					const applied = turns.some(item => item.mode === 'apply' && item.parent_id === turn.id && item.status !== 'failed');
+					const canApprove = turn.mode === 'propose' && turn.status === 'complete' && turn.patch_b64 && !applied;
+					const prUrl = safePullRequestUrl(turn.pr_url);
+					return `<section class="conversation-turn"><p class="turn-label">Utente · ${escapeHtml(formatDate(turn.created_at))} · ${escapeHtml(turn.mode)} · ${escapeHtml(turn.agent || 'general')}</p><p class="turn-task">${escapeHtml(turn.task)}</p>
+						<p class="turn-label">Copilot · ${statusLabel(turn.status)}</p><pre class="turn-report">${escapeHtml(turn.report || (turn.status === 'running' ? 'Elaborazione in corso...' : turn.mode === 'apply' && turn.pr_url ? 'Pull request creata.' : 'Nessuna risposta disponibile.'))}</pre>
+						${turn.error ? `<pre class="turn-report">${escapeHtml(turn.error)}</pre>` : ''}
+						${turn.branch_name ? `<p class="request-meta">Branch: ${escapeHtml(turn.branch_name)}</p>` : ''}
+						${turn.patch_b64 && turn.mode === 'propose' ? `<details><summary>Patch proposta</summary><pre>${escapeHtml(decodePatch(turn.patch_b64))}</pre></details>` : ''}
+						${canApprove ? `<button class="approve-button" type="button" data-thread-approve="${escapeHtml(turn.id)}">Verifica patch e crea PR</button>` : ''}
+						${prUrl ? `<p><a href="${escapeHtml(prUrl)}" target="_blank" rel="noopener noreferrer">Apri pull request</a></p>` : ''}</section>`;
+				}).join('');
+				if (markup !== lastConversationRender) {
+					const atBottom = conversationTurns.scrollHeight - conversationTurns.scrollTop - conversationTurns.clientHeight < 80;
+					const openPatchIndexes = Array.from(conversationTurns.querySelectorAll('details'), (node, index) => node.open ? index : -1);
+					conversationTurns.innerHTML = markup;
+					conversationTurns.querySelectorAll('details').forEach((node, index) => { node.open = openPatchIndexes.includes(index); });
+					if (atBottom || !lastConversationRender) conversationTurns.scrollTop = conversationTurns.scrollHeight;
+					lastConversationRender = markup;
+				}
+				const running = turns.some(turn => turn.status === 'running');
+				sendFollowup.disabled = running || sendingFollowup || !turns.some(turn => turn.status === 'complete');
+				if (!sendingFollowup) followupFeedback.textContent = running ? 'Un job è in esecuzione. Attendi la risposta prima di continuare.' : '';
+			} catch (error) {
+				followupFeedback.textContent = error.message;
+				sendFollowup.disabled = true;
+			} finally { conversationLoading = false; }
+		}
+
+		document.getElementById('followupForm').addEventListener('submit', async event => {
+			event.preventDefault();
+			if (sendingFollowup || sendFollowup.disabled) return;
+			const parent = conversationItems.filter(turn => turn.status === 'complete').at(-1);
+			if (!parent) return;
+			sendingFollowup = true;
+			let sent = false;
+			sendFollowup.disabled = true;
+			followupFeedback.textContent = 'Avvio del nuovo turno...';
+			try {
+				await api(`/api/requests/${encodeURIComponent(parent.id)}/followup`, { method: 'POST', body: JSON.stringify({ task: document.getElementById('followupTask').value.trim(), mode: document.getElementById('followupMode').value, agent: document.getElementById('followupAgent').value, skills: selectedSkills('followupSkills') }) });
+				sent = true;
+				document.getElementById('followupTask').value = '';
+				await refreshRequests();
+			} catch (error) { followupFeedback.textContent = error.message; }
+			finally {
+				sendingFollowup = false;
+				if (sent) await loadConversation();
+				else sendFollowup.disabled = false;
+			}
+		});
+		conversationTurns.addEventListener('click', event => {
+			const button = event.target.closest('[data-thread-approve]');
+			if (button) openApproval(button.dataset.threadApprove);
+		});
+		document.getElementById('closeConversation').addEventListener('click', () => conversationDialog.close());
+
+		elements.approvalForm.addEventListener('submit', async event => {
+			event.preventDefault();
+			if (!pendingApprovalId) return;
+			elements.confirmApproval.disabled = true;
+			elements.confirmApproval.textContent = 'Avvio in corso…';
+			try {
+				const result = await api(`/api/requests/${encodeURIComponent(pendingApprovalId)}/approve`, {
+					method: 'POST',
+					body: JSON.stringify({ approved_by: elements.approver.value.trim(), branch_name: document.getElementById('branchName').value.trim() })
+				});
+				elements.dialog.close();
+				showToast(`Job di applicazione ${result.job_name} avviato.`);
+				pendingApprovalId = null;
+				await refreshRequests();
+			} catch (error) {
+				document.getElementById('approvalFeedback').textContent = error.message;
+			} finally {
+				elements.confirmApproval.disabled = false;
+				elements.confirmApproval.textContent = 'Conferma approvazione';
+			}
+		});
+
+		document.getElementById('closeRequestDetails').addEventListener('click', () => detailsDialog.close());
+		document.getElementById('cancelDelete').addEventListener('click', () => deleteDialog.close());
+		deleteDialog.addEventListener('close', () => { pendingDeleteId = null; });
+		deleteDialog.addEventListener('cancel', event => {
+			if (confirmDelete.disabled) event.preventDefault();
+		});
+		document.getElementById('deleteForm').addEventListener('submit', async event => {
+			event.preventDefault();
+			if (!pendingDeleteId || confirmDelete.disabled) return;
+			const requestId = pendingDeleteId;
+			confirmDelete.disabled = true;
+			document.getElementById('cancelDelete').disabled = true;
+			confirmDelete.textContent = 'Eliminazione...';
+			deleteFeedback.textContent = '';
+			try {
+				await api(`/api/requests/${encodeURIComponent(requestId)}`, { method: 'DELETE' });
+				deletedIds.add(requestId);
+				requests = requests.filter(item => item.id !== requestId);
+				updateMetrics();
+				renderRequests();
+				deleteDialog.close();
+				elements.search.focus();
+				showToast('Richiesta eliminata dalla cronologia.');
+			} catch (error) {
+				deleteFeedback.textContent = error.message;
+			} finally {
+				confirmDelete.disabled = false;
+				document.getElementById('cancelDelete').disabled = false;
+				confirmDelete.textContent = 'Elimina richiesta';
+			}
+		});
+
+		document.getElementById('cancelApproval').addEventListener('click', () => {
+			pendingApprovalId = null;
+			elements.dialog.close();
+		});
+		elements.refresh.addEventListener('click', refreshRequests);
+		elements.search.addEventListener('input', renderRequests);
+		elements.filter.addEventListener('change', renderRequests);
+
+		api('/api/config').then(config => {
+			document.getElementById('allowedHosts').textContent = (config.allowed_git_hosts || []).join(', ') || 'non configurati';
+			document.getElementById('scopeLabel').textContent = config.namespace ? `Namespace · ${config.namespace}` : 'Ambiente locale';
+		}).catch(() => {
+			document.getElementById('allowedHosts').textContent = 'configurati dal server';
+		});
+
+		refreshRequests();
+		window.setInterval(refreshRequests, 10000);
+	</script>
+</body>
+</html>

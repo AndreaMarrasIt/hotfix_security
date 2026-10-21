@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: copilot-api
+  namespace: copilot-mvp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: copilot-api
+  template:
+    metadata:
+      labels:
+        app: copilot-api
+    spec:
+      serviceAccountName: copilot-api
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: api
+        image: copilot-api:0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NAMESPACE
+          value: copilot-mvp
+        - name: DB_PATH
+          value: /data/app.db
+        - name: RUNNER_IMAGE
+          value: copilot-runner:0.2
+        - name: ALLOWED_GIT_HOSTS
+          value: github.com
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: copilot-mvp-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: copilot-api
+  namespace: copilot-mvp
+spec:
+  selector:
+    app: copilot-api
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
