@@ -110,7 +110,7 @@
 		.metric-value { font-size: 25px; font-variant-numeric: tabular-nums; font-weight: 700; line-height: 1; }
 
 		.workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 20px; }
-		.form-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .7fr) minmax(0, 1.4fr); gap: 0 20px; align-items: start; }
+		.form-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 0 20px; align-items: start; }
 		.form-body .primary-button { grid-column: 1 / -1; width: fit-content; min-width: 180px; }
 		.form-body .form-feedback { grid-column: 1 / -1; }
 		.form-panel, .field { min-width: 0; }
@@ -330,21 +330,14 @@
 						<p class="field-hint">Host consentiti: <span id="allowedHosts">caricamento…</span></p>
 					</div>
 					<div class="field">
-						<label for="mode">Modalità</label>
-						<select id="mode" name="mode">
-							<option value="analyze">Analisi in sola lettura</option>
-							<option value="propose">Proposta di remediation</option>
-						</select>
-					</div>
-					<div class="field">
 						<label for="task">Obiettivo dell'analisi</label>
 						<textarea id="task" name="task" required minlength="5" maxlength="4000" rows="6" placeholder="Descrivi cosa vuoi analizzare o quale problema vuoi approfondire…"></textarea>
 					</div>
 					<div class="profile-options">
-						<div class="field"><label for="agent">Profilo Agent</label><select id="agent"><option value="general">Generale</option><option value="security">Security review</option><option value="reliability">Affidabilità</option></select></div>
-						<fieldset class="skill-options" id="initialSkills"><legend>Skill di analisi</legend><label><input type="checkbox" value="input-validation">Validazione input</label><label><input type="checkbox" value="error-handling">Gestione errori</label><label><input type="checkbox" value="tests">Test di regressione</label></fieldset>
+						<div class="field"><label for="agent">Profilo Agent</label><select id="agent" required></select></div>
+						<fieldset class="skill-options" id="initialSkills"><legend>Skill di analisi</legend></fieldset>
 					</div>
-					<button class="primary-button" id="submitButton" type="submit">Avvia richiesta <span aria-hidden="true">→</span></button>
+					<button class="primary-button" id="submitButton" type="submit" disabled>Avvia richiesta <span aria-hidden="true">→</span></button>
 					<p class="form-feedback" id="formFeedback" role="status" aria-live="polite"></p>
 				</form>
 			</section>
@@ -399,11 +392,10 @@
 			<label for="followupTask">Messaggio per Copilot</label>
 			<textarea id="followupTask" required minlength="5" maxlength="4000" rows="2" placeholder="Approfondisci il risultato oppure descrivi la fix da proporre..."></textarea>
 			<div class="composer-controls">
-				<div class="field"><label for="followupMode">Azione</label><select id="followupMode"><option value="analyze">Nuova analisi</option><option value="propose">Proponi una fix</option></select></div>
-				<div class="field"><label for="followupAgent">Profilo Agent</label><select id="followupAgent"><option value="general">Generale</option><option value="security">Security review</option><option value="reliability">Affidabilità</option></select></div>
+				<div class="field"><label for="followupAgent">Profilo Agent</label><select id="followupAgent" required></select></div>
 				<button class="primary-button" id="sendFollowup" type="submit">Invia a Copilot</button>
 			</div>
-			<div class="profile-options"><fieldset class="skill-options" id="followupSkills"><legend>Skill di analisi</legend><label><input type="checkbox" value="input-validation">Validazione input</label><label><input type="checkbox" value="error-handling">Gestione errori</label><label><input type="checkbox" value="tests">Test di regressione</label></fieldset></div>
+			<div class="profile-options"><fieldset class="skill-options" id="followupSkills"><legend>Skill di analisi</legend></fieldset></div>
 			<p id="followupFeedback" class="form-feedback" role="status"></p>
 		</form>
 	</dialog>
@@ -433,7 +425,6 @@
 		const elements = {
 			form: document.getElementById('runForm'),
 			repo: document.getElementById('repo'),
-			mode: document.getElementById('mode'),
 			task: document.getElementById('task'),
 			submit: document.getElementById('submitButton'),
 			feedback: document.getElementById('formFeedback'),
@@ -586,7 +577,6 @@
 			const fields = [
 				['Repository', repoUrl ? `<a href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.repo_url)}</a>` : escapeHtml(item.repo_url)],
 				['ID richiesta', escapeHtml(item.id)],
-				['Modalità', escapeHtml(({ analyze: 'Analisi in sola lettura', propose: 'Proposta di remediation', apply: 'Applicazione' })[item.mode] || item.mode)],
 				['Stato', escapeHtml(statusLabel(item.status))],
 				['Creata il', escapeHtml(formatDate(item.created_at))],
 				['Job Kubernetes', escapeHtml(item.job_name)],
@@ -637,9 +627,10 @@
 			try {
 				const result = await api('/api/requests', {
 					method: 'POST',
-					body: JSON.stringify({ repo_url: elements.repo.value.trim(), mode: elements.mode.value, task: elements.task.value.trim(), agent: document.getElementById('agent').value, skills: selectedSkills('initialSkills') })
+					body: JSON.stringify({ repo_url: elements.repo.value.trim(), task: elements.task.value.trim(), agent: document.getElementById('agent').value, skills: selectedSkills('initialSkills') })
 				});
 				elements.form.reset();
+				document.getElementById('initialSkills').dispatchEvent(new Event('change'));
 				showToast(`Job ${result.job_name} avviato.`);
 				await refreshRequests();
 			} catch (error) {
@@ -747,7 +738,7 @@
 			sendFollowup.disabled = true;
 			followupFeedback.textContent = 'Avvio del nuovo turno...';
 			try {
-				await api(`/api/requests/${encodeURIComponent(parent.id)}/followup`, { method: 'POST', body: JSON.stringify({ task: document.getElementById('followupTask').value.trim(), mode: document.getElementById('followupMode').value, agent: document.getElementById('followupAgent').value, skills: selectedSkills('followupSkills') }) });
+				await api(`/api/requests/${encodeURIComponent(parent.id)}/followup`, { method: 'POST', body: JSON.stringify({ task: document.getElementById('followupTask').value.trim(), agent: document.getElementById('followupAgent').value, skills: selectedSkills('followupSkills') }) });
 				sent = true;
 				document.getElementById('followupTask').value = '';
 				await refreshRequests();
@@ -829,8 +820,30 @@
 		api('/api/config').then(config => {
 			document.getElementById('allowedHosts').textContent = (config.allowed_git_hosts || []).join(', ') || 'non configurati';
 			document.getElementById('scopeLabel').textContent = config.namespace ? `Namespace · ${config.namespace}` : 'Ambiente locale';
-		}).catch(() => {
+			const labels = { general: 'Generale', security: 'Security review', reliability: 'Affidabilità', 'input-validation': 'Validazione input', 'error-handling': 'Gestione errori', tests: 'Test di regressione' };
+			for (const id of ['agent', 'followupAgent']) {
+				const select = document.getElementById(id);
+				select.replaceChildren(...config.agents.map(name => new Option(labels[name] || name, name, name === 'general', name === 'general')));
+			}
+			for (const id of ['initialSkills', 'followupSkills']) {
+				const fieldset = document.getElementById(id);
+				for (const name of config.skills) {
+					const label = document.createElement('label');
+					const input = document.createElement('input');
+					input.type = 'checkbox';
+					input.value = name;
+					label.append(input, document.createTextNode(labels[name] || name));
+					fieldset.append(label);
+				}
+				fieldset.addEventListener('change', () => {
+					const limitReached = selectedSkills(id).length >= 3;
+					fieldset.querySelectorAll('input').forEach(input => { input.disabled = limitReached && !input.checked; });
+				});
+			}
+			elements.submit.disabled = !config.agents.length;
+		}).catch(error => {
 			document.getElementById('allowedHosts').textContent = 'configurati dal server';
+			elements.feedback.textContent = `Impossibile caricare i profili: ${error.message}`;
 		});
 
 		refreshRequests();

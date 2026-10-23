@@ -62,8 +62,8 @@ Open http://localhost:8080. API health: `curl http://localhost:8080/api/health`.
 
 ## Conversations, fixes, and pull requests
 
-1. Start an analysis or remediation proposal. Optionally select an Agent profile (general, security, reliability) and one or more skills (input validation, error handling, regression tests).
-2. Select **Conversazione** on a request to read its persisted turns. Send another message with **Nuova analisi** for clarification/reanalysis or **Proponi una fix** for a new patch proposal. Only one job per conversation may run at a time.
+1. Describe the analysis or fix you need. Select an Agent profile (general, security, reliability) and optionally up to three skills (input validation, error handling, regression tests). There is no mode selector: the request and profiles guide the response; fixes can produce a patch for review.
+2. Select **Conversazione** on a request to read its persisted turns. Send another message for clarification, reanalysis, or a fix, selecting the appropriate Agent and skills. Only one job per conversation may run at a time.
 3. Review the proposed patch in the conversation or request details. Select **Verifica patch e crea PR**, enter the approver identity and a **new branch name**, then confirm. Approval applies the saved patch; it does not ask Copilot to generate a different fix.
 4. The apply runner checks that the repository's default-branch commit still matches the proposal, rejects an existing remote branch, creates the user-selected branch in the original repository, and attempts to open a PR targeting the default branch. The push uses an empty-ref lease so even a concurrently created branch cannot be overwritten.
 5. Job errors and the resulting PR link appear in the conversation. A failed apply can be retried with a different branch name. Active/completed apply records prevent duplicate approval. If the base commit changed, generate a new proposal instead.
@@ -71,7 +71,7 @@ Open http://localhost:8080. API health: `curl http://localhost:8080/api/health`.
 ### Context and profiles
 
 - Each turn is a fresh isolated clone, not a resumed Copilot CLI filesystem/session. SQLite stores the complete history, but the next prompt includes at most the six most recent turns, up to 4,000 task characters and 8,000 report characters per turn, with a final 48,000-byte context cap. Earlier patches are not automatically applied to later analysis/proposal clones. Describe the desired refinement in the new message.
-- Agent/skill selections are curated instruction profiles defined by the application. They are not arbitrary uploaded `SKILL.md` files, native `--agent` configurations, or a multi-agent execution system. They do not expand tool permissions or guarantee that suggested tests were executed.
+- Agent/skill instructions are Markdown files in [backend/agents](backend/agents) and [backend/skills](backend/skills). Edit the files to change instructions; add a `.md` file to add a profile. The filename without extension is its API/UI identifier: use lowercase letters, digits and single hyphens (for example `code-review.md`). Keep `general.md` as the default Agent. Files are read on each configuration/prompt request, without restarting the backend. Only server-managed regular files are loaded, not symlinks or paths supplied by users. These are application instruction profiles, not native `--agent` configurations or a multi-agent system; they do not expand tool permissions or guarantee tests were executed.
 - Repository custom instructions and built-in MCP servers are disabled for the assistant invocation. Shell execution remains denied. Treat model output and repository content as untrusted; these restrictions do not constitute a complete sandbox.
 - Native agents, trusted skill bundles, and true CLI session resume remain future extensions: they require a server-managed allowlist, versioned trusted files, and protected per-conversation session storage. Do not load repository-supplied plugins or grant all tools merely to enable a profile.
 - Read/propose jobs do not receive `WRITE_TOKEN`. Only approved apply jobs receive it; those jobs run Git/GitHub CLI, not Copilot. Use a read-only `REPO_TOKEN` and least-privilege write credentials.
@@ -82,7 +82,9 @@ Open http://localhost:8080. API health: `curl http://localhost:8080/api/health`.
 
 Run `bash deploy.sh` from WSL to rebuild/load **both API and runner images** with a unique tag, update `RUNNER_IMAGE`, and roll out the API. Back up your SQLite volume before updating. No runner-image rebuild is needed for a change to instruction-profile text alone, but runner script/CLI changes require it. Existing Jobs continue using their original image.
 
-The conversation API adds `GET /api/requests/{id}/conversation` and `POST /api/requests/{id}/followup`. Creation/followup bodies accept `agent` and `skills`. Approval now requires both `approved_by` and `branch_name`; old clients without a branch must be updated.
+The Markdown profiles are bundled in the API image. After editing local files, rebuild and roll out that image to update Kubernetes; editing files already mounted into a running backend takes effect on the next request.
+
+The conversation API adds `GET /api/requests/{id}/conversation` and `POST /api/requests/{id}/followup`. Creation/followup bodies accept `agent` and `skills`, without `mode`. Internally these turns use `propose`, allowing either a report or a patch; historical modes remain stored, and `apply` is only launched through approval. Analysis-only behavior is guided by the prompt, not enforced by a separate read-only tool permission. Approval requires both `approved_by` and `branch_name`.
 
 Security boundaries for this feature:
 

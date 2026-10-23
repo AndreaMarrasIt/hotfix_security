@@ -1,7 +1,7 @@
 import base64, json, os, re, sqlite3, uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlparse
-from typing import Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,16 +13,7 @@ DB_PATH = os.getenv('DB_PATH', '/data/app.db')
 ALLOWED_HOSTS = {h.strip().lower() for h in os.getenv('ALLOWED_GIT_HOSTS', 'github.com').split(',') if h.strip()}
 RUNNER_IMAGE = os.getenv('RUNNER_IMAGE', 'copilot-runner:0.2')
 app = FastAPI(title='Copilot Kubernetes MVP', version='0.1.0')
-AGENTS = {
-    'general': 'Repository assistant: answer precisely and distinguish evidence from assumptions.',
-    'security': 'Security reviewer: prioritize concrete vulnerabilities, exploit prerequisites, and minimal remediations.',
-    'reliability': 'Reliability reviewer: prioritize failure handling, correctness, and operational risks.',
-}
-SKILLS = {
-    'input-validation': 'Inspect validation at trust boundaries and recommend structured, allowlisted input handling.',
-    'error-handling': 'Inspect failure paths, resource cleanup, and safe error reporting.',
-    'tests': 'Identify regression coverage and, in proposal mode, add focused tests for the proposed fix.',
-}
+PROFILE_ROOT = Path(__file__).resolve().parent
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
@@ -60,15 +51,13 @@ core = client.CoreV1Api()
 class CreateRequest(BaseModel):
     repo_url: str = Field(min_length=10, max_length=500)
     task: str = Field(min_length=5, max_length=4000)
-    mode: str = Field(pattern='^(analyze|propose)$')
-    agent: Literal['general', 'security', 'reliability'] = 'general'
-    skills: list[Literal['input-validation', 'error-handling', 'tests']] = Field(default_factory=list, max_length=3)
+    agent: str = Field(default='general', min_length=1, max_length=120)
+    skills: list[str] = Field(default_factory=list, max_length=3)
 
 class FollowupRequest(BaseModel):
     task: str = Field(min_length=5, max_length=4000)
-    mode: Literal['analyze', 'propose'] = 'analyze'
-    agent: Literal['general', 'security', 'reliability'] = 'general'
-    skills: list[Literal['input-validation', 'error-handling', 'tests']] = Field(default_factory=list, max_length=3)
+    agent: str = Field(default='general', min_length=1, max_length=120)
+    skills: list[str] = Field(default_factory=list, max_length=3)
 
 class ApproveRequest(BaseModel):
     approved_by: str = Field(min_length=2, max_length=120)
@@ -84,10 +73,22 @@ def validate_branch(branch_name: str):
     return branch_name
 
 
+def load_profiles(category):
+    try:
+        return {
+            path.stem: path.read_text(encoding='utf-8').strip()
+            for path in sorted((PROFILE_ROOT / category).glob('*.md'))
+            if re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', path.stem) and path.is_file() and not path.is_symlink()
+        }
+    except (OSError, UnicodeError):
+        raise HTTPException(503, 'Could not load agent or skill profiles.')
+
+
 def build_prompt(task, agent='general', skills=None, context=''):
-    if agent not in AGENTS or any(skill not in SKILLS for skill in (skills or [])):
+    agents, available_skills = load_profiles('agents'), load_profiles('skills')
+    if agent not in agents or any(skill not in available_skills for skill in (skills or [])):
         raise HTTPException(400, 'Unknown agent or skill profile')
-    instructions = '\n'.join([AGENTS[agent]] + [SKILLS[skill] for skill in dict.fromkeys(skills or [])])
+    instructions = '\n'.join([agents[agent]] + [available_skills[skill] for skill in dict.fromkeys(skills or [])])
     context_bytes = context.encode('utf-8')
     if len(context_bytes) > 48000:
         context = '[Earlier conversation context omitted due to size limits.]\n' + context_bytes[-48000:].decode('utf-8', errors='ignore')
@@ -138,7 +139,7 @@ def health():
 
 @app.get('/api/config')
 def get_config():
-    return {'allowed_git_hosts': sorted(ALLOWED_HOSTS), 'namespace': NAMESPACE, 'agents': list(AGENTS), 'skills': list(SKILLS)}
+    return {'allowed_git_hosts': sorted(ALLOWED_HOSTS), 'namespace': NAMESPACE, 'agents': list(load_profiles('agents')), 'skills': list(load_profiles('skills'))}
 
 @app.get('/api/requests')
 def list_requests():
@@ -149,7 +150,7 @@ def list_requests():
 @app.post('/api/requests')
 def create_request(req: CreateRequest):
     repo = validate_repo(req.repo_url)
-    return launch_request(repo, req.task, req.mode, agent=req.agent, skills=req.skills)
+    return launch_request(repo, req.task, 'propose', agent=req.agent, skills=req.skills)
 
 
 def launch_request(repo, task, mode, conversation_id=None, parent_id=None, agent='general', skills=None, context='', branch_name=None, patch_b64=None, base_sha=None):
@@ -192,7 +193,7 @@ def followup(request_id: str, req: FollowupRequest):
     context = '\n\n'.join(f"User ({turn['mode']}): {turn['task'][:4000]}\nCopilot: {(turn['report'] or '')[:8000]}" for turn in turns[-6:])
     if len(turns) > 6:
         context = '[Only the six most recent turns are included.]\n' + context
-    return launch_request(current['repo_url'], req.task, req.mode, conversation_id=current['conversation_id'], parent_id=request_id, agent=req.agent, skills=req.skills, context=context)
+    return launch_request(current['repo_url'], req.task, 'propose', conversation_id=current['conversation_id'], parent_id=request_id, agent=req.agent, skills=req.skills, context=context)
 
 @app.get('/api/requests/{request_id}')
 def get_request(request_id: str):

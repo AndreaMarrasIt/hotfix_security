@@ -121,13 +121,15 @@ class ConversationTests(unittest.TestCase):
             'db': self.db, 'batch': self.batch, 'job_spec': self.factory,
             'HTTPException': HTTPException, 'NAMESPACE': 'test',
             'json': json, 're': re, 'uuid': uuid, 'datetime': datetime, 'timezone': timezone,
-            'FollowupRequest': SimpleNamespace, 'ApproveRequest': SimpleNamespace,
+            'FollowupRequest': SimpleNamespace, 'ApproveRequest': SimpleNamespace, 'CreateRequest': SimpleNamespace,
+            'Path': Path, '__file__': str(Path(__file__).with_name('main.py')),
+            'ALLOWED_HOSTS': {'github.com'},
         }
         source = ast.parse(Path(__file__).with_name('main.py').read_text())
-        names = {'init_db', 'launch_request', 'get_conversation', 'followup', 'approve', 'validate_branch', 'build_prompt'}
+        names = {'init_db', 'launch_request', 'get_conversation', 'followup', 'approve', 'validate_branch', 'build_prompt', 'load_profiles', 'get_config', 'create_request', 'validate_repo'}
         nodes = []
         for node in source.body:
-            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id in ('AGENTS', 'SKILLS') for target in node.targets):
+            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id in ('AGENTS', 'SKILLS', 'PROFILE_ROOT') for target in node.targets):
                 nodes.append(node)
             if isinstance(node, ast.FunctionDef) and node.name in names:
                 node.decorator_list = []
@@ -169,11 +171,12 @@ class ConversationTests(unittest.TestCase):
 
     def test_followup_preserves_context_repository_and_profiles(self):
         parent = self.completed()
-        result = self.namespace['followup'](parent, SimpleNamespace(task='Please propose a fix', mode='propose', agent='security', skills=['tests', 'input-validation']))
+        result = self.namespace['followup'](parent, SimpleNamespace(task='Please propose a fix', agent='security', skills=['tests', 'input-validation']))
         item = self.get_request(result['id'])
         self.assertEqual(item['parent_id'], parent)
         self.assertEqual(item['conversation_id'], parent)
         self.assertEqual(item['repo_url'], 'https://github.com/owner/repo')
+        self.assertEqual(item['mode'], 'propose')
         self.assertEqual(json.loads(item['skills']), ['tests', 'input-validation'])
         self.assertIn('Previous finding', self.factory.call_args.kwargs['context'])
         self.assertEqual(self.factory.call_args.kwargs['agent'], 'security')
@@ -211,6 +214,31 @@ class ConversationTests(unittest.TestCase):
         prompt = self.namespace['build_prompt']('Review inputs', 'security', ['tests'], 'Earlier answer')
         self.assertIn('Earlier answer', prompt)
         self.assertIn('focused tests', prompt)
+
+    def test_create_request_does_not_require_mode(self):
+        self.namespace['validate_repo'] = lambda value: value
+        result = self.namespace['create_request'](SimpleNamespace(repo_url='https://github.com/owner/repo', task='Review the inputs', agent='general', skills=[]))
+        self.assertEqual(self.get_request(result['id'])['mode'], 'propose')
+
+    def test_markdown_profiles_are_discovered_and_reloaded(self):
+        root = Path(self.directory.name) / 'profiles'
+        for category in ('agents', 'skills'):
+            (root / category).mkdir(parents=True)
+        agent = root / 'agents' / 'custom.md'
+        agent.write_text('Custom agent instructions', encoding='utf-8')
+        (root / 'skills' / 'custom-skill.md').write_text('Custom skill instructions', encoding='utf-8')
+        (root / 'agents' / 'ignored.txt').write_text('Not a profile', encoding='utf-8')
+        self.namespace['PROFILE_ROOT'] = root
+        configuration = self.namespace['get_config']()
+        self.assertEqual(configuration['agents'], ['custom'])
+        self.assertEqual(configuration['skills'], ['custom-skill'])
+        prompt = self.namespace['build_prompt']('Review inputs', 'custom', ['custom-skill', 'custom-skill'])
+        self.assertIn('Custom agent instructions', prompt)
+        self.assertEqual(prompt.count('Custom skill instructions'), 1)
+        agent.write_text('Updated agent instructions', encoding='utf-8')
+        self.assertIn('Updated agent instructions', self.namespace['build_prompt']('Review inputs', 'custom'))
+        with self.assertRaises(HTTPException):
+            self.namespace['build_prompt']('Review inputs', '../custom')
 
     def test_failed_apply_can_be_retried_with_a_new_branch(self):
         parent = self.completed('propose')
